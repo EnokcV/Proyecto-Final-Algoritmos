@@ -1,355 +1,203 @@
-"""Interfaz gráfica del simulador de inventario y ventas."""
-
-import tkinter as tk
-from tkinter import messagebox, ttk
+﻿import tkinter as tk
+from tkinter import messagebox
 
 from modelo import ErrorInventario, Inventario
 
 
-COLOR_TEXTO = "#1d2a33"
-COLOR_SECUNDARIO = "#5b6770"
-COLOR_BORDE = "#d5dbe1"
-COLOR_ALERTA = "#a1261d"
-COLOR_EXITO = "#245c3f"
-
-
 def dinero(valor):
-    return f"${valor:,.2f}"
-
-
-def plural(cantidad, singular, terminacion="s"):
-    return f"{cantidad} {singular}{'' if cantidad == 1 else terminacion}"
+    return "$" + format(valor, ",.2f")
 
 
 class Aplicacion(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Simulador de Inventario y Ventas")
-        self.geometry("1040x700")
-        self.minsize(960, 640)
+        self.geometry("980x680")
         self.inventario = Inventario()
         self._clave_seleccionada = None
-        self._opciones_venta = {}
+        self._productos_visibles = []
+        self._ventas_recientes = []
 
-        self._configurar_estilos()
-        self._crear_encabezado()
-        self._crear_pestanas()
-        self._crear_barra_estado()
+        self._crear_interfaz()
         self.actualizar_todo()
 
         if self.inventario.aviso_carga:
             self._mensaje(self.inventario.aviso_carga, error=True)
 
-    def _configurar_estilos(self):
-        estilo = ttk.Style(self)
-        if "clam" in estilo.theme_names():
-            estilo.theme_use("clam")
-        estilo.configure(".", font=("Segoe UI", 10))
-        estilo.configure("TButton", padding=(10, 5))
-        estilo.configure("TNotebook.Tab", padding=(16, 7), font=("Segoe UI", 10))
-        estilo.configure("Treeview", rowheight=26, font=("Segoe UI", 10))
-        estilo.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
-        estilo.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
-        self.configure(background="#eef1f4")
+    def _crear_interfaz(self):
+        titulo = tk.Label(self, text="Simulador de Inventario y Ventas", font=("Arial", 16, "bold"))
+        titulo.pack(pady=(10, 2))
+        subtitulo = tk.Label(self, text="Registra productos, controla existencias y consulta resultados.")
+        subtitulo.pack(pady=(0, 8))
 
-    def _crear_encabezado(self):
-        encabezado = tk.Frame(self, background="white", highlightbackground=COLOR_BORDE, highlightthickness=1)
-        encabezado.pack(fill="x")
-        tk.Label(
-            encabezado,
-            text="Simulador de Inventario y Ventas",
-            background="white",
-            foreground=COLOR_TEXTO,
-            font=("Segoe UI", 16, "bold"),
-        ).pack(anchor="w", padx=20, pady=(14, 0))
-        tk.Label(
-            encabezado,
-            text="Registra productos, controla existencias y consulta tus resultados.",
-            background="white",
-            foreground=COLOR_SECUNDARIO,
-            font=("Segoe UI", 9),
-        ).pack(anchor="w", padx=20, pady=(0, 12))
+        contenedor = tk.Frame(self)
+        contenedor.pack(fill="both", expand=True, padx=10, pady=5)
 
-    def _crear_barra_estado(self):
-        self.var_estado = tk.StringVar(value="Listo.")
-        self.etiqueta_estado = tk.Label(
-            self,
-            textvariable=self.var_estado,
-            anchor="w",
-            background="#dde3e8",
-            foreground="#33424d",
-            padx=14,
-            pady=5,
-        )
+        panel_izq = tk.Frame(contenedor)
+        panel_izq.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+        panel_der = tk.Frame(contenedor)
+        panel_der.pack(side="right", fill="both", expand=True)
+
+        self._crear_seccion_inventario(panel_izq)
+        self._crear_seccion_ventas(panel_der)
+        self._crear_seccion_reportes(panel_der)
+
+        self.var_estado = tk.StringVar()
+        self.var_estado.set("Listo.")
+        self.etiqueta_estado = tk.Label(self, textvariable=self.var_estado, anchor="w", relief="sunken")
         self.etiqueta_estado.pack(fill="x", side="bottom")
 
-    def _crear_pestanas(self):
-        cuaderno = ttk.Notebook(self)
-        cuaderno.pack(fill="both", expand=True, padx=16, pady=12)
+    def _crear_seccion_inventario(self, padre):
+        marco = tk.LabelFrame(padre, text="Inventario", padx=8, pady=8)
+        marco.pack(fill="both", expand=True)
 
-        pestana_inventario = ttk.Frame(cuaderno, padding=14)
-        pestana_ventas = ttk.Frame(cuaderno, padding=14)
-        pestana_reportes = ttk.Frame(cuaderno, padding=14)
+        form = tk.Frame(marco)
+        form.pack(fill="x")
 
-        cuaderno.add(pestana_inventario, text="Inventario")
-        cuaderno.add(pestana_ventas, text="Ventas")
-        cuaderno.add(pestana_reportes, text="Reportes")
-
-        self._crear_tab_inventario(pestana_inventario)
-        self._crear_tab_ventas(pestana_ventas)
-        self._crear_tab_reportes(pestana_reportes)
-
-    def _crear_tab_inventario(self, contenedor):
-        formulario = ttk.LabelFrame(contenedor, text="Datos del producto", padding=12)
-        formulario.pack(fill="x")
-
+        tk.Label(form, text="Clave:").grid(row=0, column=0, sticky="w")
         self.var_clave = tk.StringVar()
+        tk.Entry(form, textvariable=self.var_clave, width=12).grid(row=0, column=1, sticky="w", padx=(4, 10))
+
+        tk.Label(form, text="Nombre:").grid(row=0, column=2, sticky="w")
         self.var_nombre = tk.StringVar()
+        tk.Entry(form, textvariable=self.var_nombre, width=24).grid(row=0, column=3, sticky="w", padx=(4, 10))
+
+        tk.Label(form, text="Precio:").grid(row=1, column=0, sticky="w", pady=(4, 0))
         self.var_precio = tk.StringVar()
-        self.var_cantidad = tk.StringVar(value="0")
+        tk.Entry(form, textvariable=self.var_precio, width=12).grid(row=1, column=1, sticky="w", padx=(4, 10), pady=(4, 0))
 
-        campos = (
-            ("Clave", self.var_clave, 16),
-            ("Nombre", self.var_nombre, 34),
-            ("Precio ($)", self.var_precio, 14),
-            ("Cantidad", self.var_cantidad, 12),
-        )
-        for columna, (etiqueta, variable, ancho) in enumerate(campos):
-            ttk.Label(formulario, text=etiqueta).grid(row=0, column=columna, sticky="w")
-            ttk.Entry(formulario, textvariable=variable, width=ancho).grid(
-                row=1, column=columna, sticky="we", padx=(0, 14), pady=(3, 0)
-            )
-            formulario.columnconfigure(columna, weight=1 if etiqueta == "Nombre" else 0)
+        tk.Label(form, text="Cantidad:").grid(row=1, column=2, sticky="w", pady=(4, 0))
+        self.var_cantidad = tk.StringVar()
+        self.var_cantidad.set("0")
+        tk.Entry(form, textvariable=self.var_cantidad, width=12).grid(row=1, column=3, sticky="w", padx=(4, 10), pady=(4, 0))
 
-        botones = ttk.Frame(formulario)
-        botones.grid(row=2, column=0, columnspan=4, sticky="we", pady=(14, 0))
-        ttk.Button(botones, text="Agregar producto", command=self._agregar_producto).pack(side="left")
-        ttk.Button(botones, text="Guardar cambios", command=self._guardar_cambios).pack(side="left", padx=8)
-        ttk.Button(botones, text="Limpiar formulario", command=self._limpiar_formulario).pack(side="left")
-        ttk.Button(botones, text="Eliminar seleccionado", command=self._eliminar_producto).pack(side="right")
+        botones = tk.Frame(marco)
+        botones.pack(fill="x", pady=(8, 4))
+        tk.Button(botones, text="Agregar", command=self._agregar_producto).pack(side="left")
+        tk.Button(botones, text="Guardar cambios", command=self._guardar_cambios).pack(side="left", padx=4)
+        tk.Button(botones, text="Eliminar", command=self._eliminar_producto).pack(side="left", padx=4)
+        tk.Button(botones, text="Limpiar", command=self._limpiar_formulario).pack(side="left", padx=4)
 
-        ttk.Label(
-            formulario,
-            text="La clave identifica al producto y no se modifica al editarlo. Las existencias se capturan como cantidad total disponible.",
-            foreground=COLOR_SECUNDARIO,
-            font=("Segoe UI", 9),
-        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        nota = tk.Label(marco, text="La clave identifica al producto y no se cambia al editar.", fg="gray")
+        nota.pack(anchor="w")
 
-        marco_tabla = ttk.LabelFrame(contenedor, text="Existencias", padding=12)
-        marco_tabla.pack(fill="both", expand=True, pady=(12, 0))
-
-        barra = ttk.Frame(marco_tabla)
-        barra.pack(fill="x", pady=(0, 8))
-        ttk.Label(barra, text="Buscar:").pack(side="left")
+        busqueda = tk.Frame(marco)
+        busqueda.pack(fill="x", pady=(6, 2))
+        tk.Label(busqueda, text="Buscar:").pack(side="left")
         self.var_busqueda = tk.StringVar()
-        self.var_busqueda.trace_add("write", lambda *_: self._refrescar_inventario())
-        ttk.Entry(barra, textvariable=self.var_busqueda, width=32).pack(side="left", padx=(8, 0))
-        self.etiqueta_conteo = ttk.Label(barra, text="", foreground=COLOR_SECUNDARIO)
+        self.var_busqueda.trace("w", lambda *args: self._refrescar_inventario())
+        tk.Entry(busqueda, textvariable=self.var_busqueda, width=24).pack(side="left", padx=4)
+        self.etiqueta_conteo = tk.Label(busqueda, text="", fg="gray")
         self.etiqueta_conteo.pack(side="right")
 
-        contenedor_tabla = ttk.Frame(marco_tabla)
-        contenedor_tabla.pack(fill="both", expand=True)
-
-        columnas = ("clave", "nombre", "precio", "cantidad", "valor")
-        self.tabla_inventario = ttk.Treeview(
-            contenedor_tabla, columns=columnas, show="headings", selectmode="browse"
-        )
-        encabezados = {
-            "clave": ("Clave", 110, "w"),
-            "nombre": ("Nombre", 320, "w"),
-            "precio": ("Precio", 110, "e"),
-            "cantidad": ("Existencias", 110, "e"),
-            "valor": ("Valor", 120, "e"),
-        }
-        for columna, (titulo, ancho, alineacion) in encabezados.items():
-            self.tabla_inventario.heading(columna, text=titulo)
-            self.tabla_inventario.column(columna, width=ancho, anchor=alineacion, stretch=columna == "nombre")
-        self.tabla_inventario.tag_configure("bajo", foreground=COLOR_ALERTA)
-        self.tabla_inventario.pack(side="left", fill="both", expand=True)
-        scroll = ttk.Scrollbar(contenedor_tabla, orient="vertical", command=self.tabla_inventario.yview)
+        lista_frame = tk.Frame(marco)
+        lista_frame.pack(fill="both", expand=True, pady=(4, 0))
+        self.lista_inventario = tk.Listbox(lista_frame, height=18, exportselection=False)
+        self.lista_inventario.pack(side="left", fill="both", expand=True)
+        scroll = tk.Scrollbar(lista_frame, orient="vertical", command=self.lista_inventario.yview)
         scroll.pack(side="right", fill="y")
-        self.tabla_inventario.configure(yscrollcommand=scroll.set)
-        self.tabla_inventario.bind("<<TreeviewSelect>>", self._seleccionar_producto)
+        self.lista_inventario.config(yscrollcommand=scroll.set)
+        self.lista_inventario.bind("<<ListboxSelect>>", self._seleccionar_producto)
 
-    def _crear_tab_ventas(self, contenedor):
-        registro = ttk.LabelFrame(contenedor, text="Registrar venta", padding=12)
-        registro.pack(fill="x")
+    def _crear_seccion_ventas(self, padre):
+        marco = tk.LabelFrame(padre, text="Ventas", padx=8, pady=8)
+        marco.pack(fill="both", expand=True)
 
-        ttk.Label(registro, text="Producto").grid(row=0, column=0, sticky="w")
-        ttk.Label(registro, text="Cantidad").grid(row=0, column=1, sticky="w", padx=(14, 0))
-
+        fila = tk.Frame(marco)
+        fila.pack(fill="x")
+        tk.Label(fila, text="Producto:").grid(row=0, column=0, sticky="w")
         self.var_producto_venta = tk.StringVar()
-        self.combo_productos = ttk.Combobox(
-            registro, textvariable=self.var_producto_venta, state="readonly", width=52
-        )
-        self.combo_productos.grid(row=1, column=0, sticky="we", padx=(0, 14), pady=(3, 0))
-        self.combo_productos.bind("<<ComboboxSelected>>", lambda _evento: self._actualizar_resumen_venta())
+        self.var_producto_venta.set("")
+        self.menu_productos = tk.OptionMenu(fila, self.var_producto_venta, "")
+        self.menu_productos.config(width=28)
+        self.menu_productos.grid(row=0, column=1, sticky="w", padx=4)
+        self.var_producto_venta.trace("w", lambda *args: self._actualizar_resumen_venta())
 
-        self.var_cantidad_venta = tk.StringVar(value="1")
-        self.var_cantidad_venta.trace_add("write", lambda *_: self._actualizar_resumen_venta())
-        ttk.Spinbox(registro, from_=1, to=999999, width=10, textvariable=self.var_cantidad_venta).grid(
-            row=1, column=1, sticky="w", pady=(3, 0)
-        )
-        ttk.Button(registro, text="Registrar venta", command=self._registrar_venta).grid(
-            row=1, column=2, sticky="e", padx=(14, 0), pady=(3, 0)
-        )
-        registro.columnconfigure(0, weight=1)
+        tk.Label(fila, text="Cantidad:").grid(row=0, column=2, sticky="w", padx=(8, 0))
+        self.var_cantidad_venta = tk.StringVar()
+        self.var_cantidad_venta.set("1")
+        tk.Entry(fila, textvariable=self.var_cantidad_venta, width=8).grid(row=0, column=3, sticky="w", padx=4)
+        self.var_cantidad_venta.trace("w", lambda *args: self._actualizar_resumen_venta())
 
-        self.etiqueta_resumen_venta = ttk.Label(
-            registro,
-            text="Selecciona un producto para vender.",
-            foreground=COLOR_SECUNDARIO,
-        )
-        self.etiqueta_resumen_venta.grid(row=2, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        tk.Button(fila, text="Registrar venta", command=self._registrar_venta).grid(row=0, column=4, padx=6)
 
-        marco_historial = ttk.LabelFrame(contenedor, text="Últimas ventas", padding=12)
-        marco_historial.pack(fill="both", expand=True, pady=(12, 0))
+        self.etiqueta_resumen_venta = tk.Label(marco, text="Selecciona un producto para vender.", fg="gray", anchor="w", justify="left")
+        self.etiqueta_resumen_venta.pack(fill="x", pady=(6, 4))
 
-        contenedor_tabla = ttk.Frame(marco_historial)
-        contenedor_tabla.pack(fill="both", expand=True)
-
-        columnas = ("fecha", "clave", "nombre", "cantidad", "precio", "total")
-        self.tabla_ventas = ttk.Treeview(contenedor_tabla, columns=columnas, show="headings", height=8)
-        encabezados = {
-            "fecha": ("Fecha", 150, "w"),
-            "clave": ("Clave", 100, "w"),
-            "nombre": ("Producto", 300, "w"),
-            "cantidad": ("Cantidad", 90, "e"),
-            "precio": ("Precio unitario", 130, "e"),
-            "total": ("Total", 120, "e"),
-        }
-        for columna, (titulo, ancho, alineacion) in encabezados.items():
-            self.tabla_ventas.heading(columna, text=titulo)
-            self.tabla_ventas.column(columna, width=ancho, anchor=alineacion, stretch=columna == "nombre")
-        self.tabla_ventas.pack(side="left", fill="both", expand=True)
-        scroll = ttk.Scrollbar(contenedor_tabla, orient="vertical", command=self.tabla_ventas.yview)
+        tk.Label(marco, text="Ultimas ventas:").pack(anchor="w")
+        lista_frame = tk.Frame(marco)
+        lista_frame.pack(fill="both", expand=True)
+        self.lista_ventas = tk.Listbox(lista_frame, height=8, exportselection=False)
+        self.lista_ventas.pack(side="left", fill="both", expand=True)
+        scroll = tk.Scrollbar(lista_frame, orient="vertical", command=self.lista_ventas.yview)
         scroll.pack(side="right", fill="y")
-        self.tabla_ventas.configure(yscrollcommand=scroll.set)
+        self.lista_ventas.config(yscrollcommand=scroll.set)
 
-    def _crear_tab_reportes(self, contenedor):
-        resumen = ttk.Frame(contenedor)
-        resumen.pack(fill="x")
+    def _crear_seccion_reportes(self, padre):
+        marco = tk.LabelFrame(padre, text="Reportes", padx=8, pady=8)
+        marco.pack(fill="both", expand=True, pady=(8, 0))
 
-        self.tarjetas = {}
-        tarjetas = (
-            ("total", "Total vendido"),
-            ("unidades", "Unidades vendidas"),
-            ("ventas", "Número de ventas"),
-            ("inventario", "Valor del inventario"),
-        )
-        for indice, (clave, titulo) in enumerate(tarjetas):
-            tarjeta = tk.Frame(
-                resumen, background="white", highlightbackground=COLOR_BORDE, highlightthickness=1
-            )
-            tarjeta.grid(row=0, column=indice, sticky="nsew", padx=(0 if indice == 0 else 8, 0))
-            resumen.columnconfigure(indice, weight=1)
-            tk.Label(
-                tarjeta,
-                text=titulo,
-                background="white",
-                foreground=COLOR_SECUNDARIO,
-                font=("Segoe UI", 9),
-            ).pack(anchor="w", padx=14, pady=(10, 0))
-            valor = tk.Label(
-                tarjeta,
-                text="—",
-                background="white",
-                foreground=COLOR_TEXTO,
-                font=("Segoe UI", 15, "bold"),
-            )
-            valor.pack(anchor="w", padx=14, pady=(2, 12))
-            self.tarjetas[clave] = valor
+        tarjetas = tk.Frame(marco)
+        tarjetas.pack(fill="x")
+        self.var_total_vendido = tk.StringVar()
+        self.var_total_vendido.set("$0.00")
+        self.var_unidades_vendidas = tk.StringVar()
+        self.var_unidades_vendidas.set("0")
+        self.var_numero_ventas = tk.StringVar()
+        self.var_numero_ventas.set("0")
+        self.var_valor_inventario = tk.StringVar()
+        self.var_valor_inventario.set("$0.00")
 
-        controles = ttk.Frame(contenedor)
-        controles.pack(fill="x", pady=(14, 0))
-        ttk.Label(controles, text="Umbral de bajo inventario:").pack(side="left")
-        self.var_umbral = tk.StringVar(value=str(self.inventario.umbral_bajo_inventario))
-        ttk.Spinbox(controles, from_=0, to=999999, width=8, textvariable=self.var_umbral).pack(
-            side="left", padx=(8, 8)
-        )
-        ttk.Button(controles, text="Aplicar", command=self._aplicar_umbral).pack(side="left")
-        ttk.Label(
-            controles,
-            text="Se marcan como bajo inventario los productos con existencias iguales o menores al umbral.",
-            foreground=COLOR_SECUNDARIO,
-            font=("Segoe UI", 9),
-        ).pack(side="left", padx=(14, 0))
+        self._tarjeta(tarjetas, "Total vendido", self.var_total_vendido, 0)
+        self._tarjeta(tarjetas, "Unidades vendidas", self.var_unidades_vendidas, 1)
+        self._tarjeta(tarjetas, "Numero de ventas", self.var_numero_ventas, 2)
+        self._tarjeta(tarjetas, "Valor inventario", self.var_valor_inventario, 3)
 
-        detalle = ttk.Frame(contenedor)
-        detalle.pack(fill="both", expand=True, pady=(12, 0))
-        detalle.columnconfigure(0, weight=2)
-        detalle.columnconfigure(1, weight=3)
-        detalle.rowconfigure(0, weight=1)
+        umbral = tk.Frame(marco)
+        umbral.pack(fill="x", pady=(6, 2))
+        tk.Label(umbral, text="Umbral bajo inventario:").pack(side="left")
+        self.var_umbral = tk.StringVar()
+        self.var_umbral.set(str(self.inventario.umbral_bajo_inventario))
+        tk.Entry(umbral, textvariable=self.var_umbral, width=6).pack(side="left", padx=4)
+        tk.Button(umbral, text="Aplicar", command=self._aplicar_umbral).pack(side="left")
 
-        marco_bajo = ttk.LabelFrame(detalle, text="Productos por agotarse", padding=10)
-        marco_bajo.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        bajos_frame = tk.Frame(marco)
+        bajos_frame.pack(fill="both", expand=True, pady=(4, 0))
+        izquierda = tk.Frame(bajos_frame)
+        izquierda.pack(side="left", fill="both", expand=True, padx=(0, 6))
+        derecha = tk.Frame(bajos_frame)
+        derecha.pack(side="right", fill="both", expand=True)
 
-        contenedor_bajo = ttk.Frame(marco_bajo)
-        contenedor_bajo.pack(fill="both", expand=True)
-        columnas_bajo = ("clave", "nombre", "cantidad")
-        self.tabla_bajo = ttk.Treeview(contenedor_bajo, columns=columnas_bajo, show="headings")
-        for columna, (titulo, ancho) in {
-            "clave": ("Clave", 90),
-            "nombre": ("Producto", 200),
-            "cantidad": ("Existencias", 90),
-        }.items():
-            self.tabla_bajo.heading(columna, text=titulo)
-            self.tabla_bajo.column(
-                columna, width=ancho, anchor="e" if columna == "cantidad" else "w", stretch=columna == "nombre"
-            )
-        self.tabla_bajo.pack(side="left", fill="both", expand=True)
-        scroll_bajo = ttk.Scrollbar(contenedor_bajo, orient="vertical", command=self.tabla_bajo.yview)
-        scroll_bajo.pack(side="right", fill="y")
-        self.tabla_bajo.configure(yscrollcommand=scroll_bajo.set)
+        tk.Label(izquierda, text="Productos por agotarse:").pack(anchor="w")
+        self.lista_bajos = tk.Listbox(izquierda, height=6, exportselection=False)
+        self.lista_bajos.pack(fill="both", expand=True)
 
-        marco_historial = ttk.LabelFrame(detalle, text="Historial de ventas", padding=10)
-        marco_historial.grid(row=0, column=1, sticky="nsew")
+        tk.Label(derecha, text="Historial de ventas:").pack(anchor="w")
+        self.lista_historial = tk.Listbox(derecha, height=6, exportselection=False)
+        self.lista_historial.pack(fill="both", expand=True)
 
-        contenedor_historial = ttk.Frame(marco_historial)
-        contenedor_historial.pack(fill="both", expand=True)
-        columnas_historial = ("fecha", "clave", "nombre", "cantidad", "total")
-        self.tabla_historial = ttk.Treeview(
-            contenedor_historial, columns=columnas_historial, show="headings"
-        )
-        for columna, (titulo, ancho) in {
-            "fecha": ("Fecha", 140),
-            "clave": ("Clave", 90),
-            "nombre": ("Producto", 220),
-            "cantidad": ("Cant.", 60),
-            "total": ("Total", 100),
-        }.items():
-            self.tabla_historial.heading(columna, text=titulo)
-            self.tabla_historial.column(
-                columna,
-                width=ancho,
-                anchor="e" if columna in ("cantidad", "total") else "w",
-                stretch=columna == "nombre",
-            )
-        self.tabla_historial.pack(side="left", fill="both", expand=True)
-        scroll_historial = ttk.Scrollbar(
-            contenedor_historial, orient="vertical", command=self.tabla_historial.yview
-        )
-        scroll_historial.pack(side="right", fill="y")
-        self.tabla_historial.configure(yscrollcommand=scroll_historial.set)
+    def _tarjeta(self, padre, titulo, variable, columna):
+        f = tk.Frame(padre, relief="groove", bd=1, padx=6, pady=4)
+        f.grid(row=0, column=columna, sticky="nsew", padx=3)
+        padre.columnconfigure(columna, weight=1)
+        tk.Label(f, text=titulo, fg="gray").pack(anchor="w")
+        tk.Label(f, textvariable=variable, font=("Arial", 11, "bold")).pack(anchor="w")
 
     def _mensaje(self, texto, error=False):
         self.var_estado.set(texto)
-        self.etiqueta_estado.configure(foreground=COLOR_ALERTA if error else COLOR_EXITO)
+        if error:
+            self.etiqueta_estado.config(fg="red")
+        else:
+            self.etiqueta_estado.config(fg="green")
 
-    @staticmethod
-    def _vaciar_tabla(tabla):
-        for elemento in tabla.get_children():
-            tabla.delete(elemento)
-
-    def _limpiar_formulario(self, mensaje=None):
+    def _limpiar_formulario(self):
         self.var_clave.set("")
         self.var_nombre.set("")
         self.var_precio.set("")
         self.var_cantidad.set("0")
         self._clave_seleccionada = None
-        self.tabla_inventario.selection_remove(self.tabla_inventario.selection())
-        if mensaje:
-            self._mensaje(mensaje)
+        self.lista_inventario.selection_clear(0, tk.END)
 
     def _agregar_producto(self):
         try:
@@ -364,29 +212,25 @@ class Aplicacion(tk.Tk):
             return
         self._limpiar_formulario()
         self.actualizar_todo()
-        self._mensaje(f"Producto «{producto.nombre}» agregado con la clave {producto.clave}.")
+        self._mensaje('Producto "' + producto.nombre + '" agregado con la clave ' + producto.clave + ".")
 
-    def _seleccionar_producto(self, _evento=None):
-        seleccion = self.tabla_inventario.selection()
+    def _seleccionar_producto(self, event=None):
+        seleccion = self.lista_inventario.curselection()
         if not seleccion:
             return
-        clave = self.tabla_inventario.item(seleccion[0], "values")[0]
-        producto = self.inventario.buscar(clave)
-        if producto is None:
+        indice = seleccion[0]
+        if indice < 0 or indice >= len(self._productos_visibles):
             return
+        producto = self._productos_visibles[indice]
         self._clave_seleccionada = producto.clave
         self.var_clave.set(producto.clave)
         self.var_nombre.set(producto.nombre)
-        self.var_precio.set(f"{producto.precio:.2f}")
+        self.var_precio.set(format(producto.precio, ".2f"))
         self.var_cantidad.set(str(producto.cantidad))
 
     def _guardar_cambios(self):
         if not self._clave_seleccionada:
-            messagebox.showinfo(
-                "Selecciona un producto",
-                "Elige un producto de la tabla para editar su nombre, precio o existencias.",
-                parent=self,
-            )
+            messagebox.showinfo("Selecciona un producto", "Elige un producto de la lista para editarlo.", parent=self)
             return
         try:
             producto = self.inventario.editar_producto(
@@ -400,58 +244,54 @@ class Aplicacion(tk.Tk):
             return
         self._limpiar_formulario()
         self.actualizar_todo()
-        self._mensaje(f"Producto «{producto.nombre}» actualizado.")
+        self._mensaje('Producto "' + producto.nombre + '" actualizado.')
 
     def _eliminar_producto(self):
         if not self._clave_seleccionada:
-            messagebox.showinfo(
-                "Selecciona un producto",
-                "Elige un producto de la tabla para eliminarlo.",
-                parent=self,
-            )
+            messagebox.showinfo("Selecciona un producto", "Elige un producto de la lista para eliminarlo.", parent=self)
             return
         producto = self.inventario.buscar(self._clave_seleccionada)
         if producto is None:
             return
-        confirmacion = messagebox.askyesno(
+        confirmar = messagebox.askyesno(
             "Eliminar producto",
-            f"¿Eliminar «{producto.nombre}» ({producto.clave})?\n\nEl historial de ventas se conservará.",
+            'Eliminar "' + producto.nombre + '" (' + producto.clave + ')?\nEl historial de ventas se conserva.',
             parent=self,
         )
-        if not confirmacion:
+        if not confirmar:
             return
         self.inventario.eliminar_producto(producto.clave)
         self._limpiar_formulario()
         self.actualizar_todo()
-        self._mensaje(f"Producto «{producto.nombre}» eliminado.")
+        self._mensaje('Producto "' + producto.nombre + '" eliminado.')
+
+    def _texto_opcion_producto(self, producto):
+        return producto.clave + " - " + producto.nombre + " (stock: " + str(producto.cantidad) + ")"
 
     def _producto_venta_actual(self):
-        clave = self._opciones_venta.get(self.var_producto_venta.get())
-        return self.inventario.buscar(clave) if clave else None
+        valor = self.var_producto_venta.get().strip()
+        if not valor:
+            return None
+        clave = valor.split(" - ", 1)[0].strip()
+        return self.inventario.buscar(clave)
 
     def _actualizar_resumen_venta(self):
         producto = self._producto_venta_actual()
         if producto is None:
-            self.etiqueta_resumen_venta.configure(
-                text="Selecciona un producto para vender.", foreground=COLOR_SECUNDARIO
-            )
+            self.etiqueta_resumen_venta.config(text="Selecciona un producto para vender.", fg="gray")
             return
         try:
             cantidad = int(self.var_cantidad_venta.get())
         except ValueError:
             cantidad = 0
         total = producto.precio * cantidad if cantidad > 0 else 0
-        self.etiqueta_resumen_venta.configure(
-            text=(
-                f"Precio unitario: {dinero(producto.precio)}    ·    "
-                f"Disponible: {producto.cantidad}    ·    "
-                f"Total estimado: {dinero(total)}"
-            ),
-            foreground=COLOR_ALERTA if cantidad > producto.cantidad else COLOR_SECUNDARIO,
-        )
+        texto = "Precio: " + dinero(producto.precio) + " | Disponible: " + str(producto.cantidad) + " | Total estimado: " + dinero(total)
+        color = "red" if cantidad > producto.cantidad else "gray"
+        self.etiqueta_resumen_venta.config(text=texto, fg=color)
 
     def _registrar_venta(self):
-        clave = self._opciones_venta.get(self.var_producto_venta.get())
+        producto = self._producto_venta_actual()
+        clave = producto.clave if producto else ""
         try:
             venta = self.inventario.registrar_venta(clave, self.var_cantidad_venta.get())
         except ErrorInventario as error:
@@ -459,98 +299,70 @@ class Aplicacion(tk.Tk):
             return
         self.var_cantidad_venta.set("1")
         self.actualizar_todo()
-        self._mensaje(
-            f"Venta #{venta.id} registrada: {venta.cantidad} × {venta.nombre} = {dinero(venta.total)}."
-        )
+        self._mensaje("Venta #" + str(venta.id) + " registrada: " + str(venta.cantidad) + " x " + venta.nombre + " = " + dinero(venta.total) + ".")
 
     def _aplicar_umbral(self):
         try:
             umbral = self.inventario.establecer_umbral(self.var_umbral.get())
         except ErrorInventario as error:
-            messagebox.showerror("Umbral inválido", str(error), parent=self)
+            messagebox.showerror("Umbral invalido", str(error), parent=self)
             return
         self.actualizar_todo()
-        self._mensaje(f"Umbral de bajo inventario actualizado a {umbral}.")
+        self._mensaje("Umbral de bajo inventario actualizado a " + str(umbral) + ".")
 
     def _refrescar_inventario(self):
-        filtro = self.var_busqueda.get().strip().casefold()
-        self._vaciar_tabla(self.tabla_inventario)
+        filtro = self.var_busqueda.get().strip().lower()
+        self.lista_inventario.delete(0, tk.END)
         productos = self.inventario.listar_productos()
-        visibles = [
-            producto
-            for producto in productos
-            if not filtro or filtro in producto.clave.casefold() or filtro in producto.nombre.casefold()
-        ]
+        visibles = []
         umbral = self.inventario.umbral_bajo_inventario
-        for producto in visibles:
-            etiquetas = ("bajo",) if producto.cantidad <= umbral else ()
-            self.tabla_inventario.insert(
-                "",
-                "end",
-                values=(
-                    producto.clave,
-                    producto.nombre,
-                    dinero(producto.precio),
-                    producto.cantidad,
-                    dinero(producto.valor),
-                ),
-                tags=etiquetas,
-            )
-        self.etiqueta_conteo.configure(
-            text=f"{plural(len(visibles), 'producto')} de {len(productos)}"
-        )
+        for producto in productos:
+            if filtro and filtro not in producto.clave.lower() and filtro not in producto.nombre.lower():
+                continue
+            visibles.append(producto)
+            marca = " [BAJO]" if producto.cantidad <= umbral else ""
+            linea = producto.clave + " | " + producto.nombre + " | " + dinero(producto.precio) + " | cant: " + str(producto.cantidad) + " | valor: " + dinero(producto.valor) + marca
+            self.lista_inventario.insert(tk.END, linea)
+        self._productos_visibles = visibles
+        self.etiqueta_conteo.config(text=str(len(visibles)) + " producto(s) de " + str(len(productos)))
 
     def _refrescar_ventas(self):
         productos = self.inventario.listar_productos()
-        self._opciones_venta = {}
         opciones = []
-        for producto in productos:
-            texto = f"{producto.clave} · {producto.nombre} (stock: {producto.cantidad})"
-            self._opciones_venta[texto] = producto.clave
-            opciones.append(texto)
-        self.combo_productos.configure(values=opciones)
-        if self.var_producto_venta.get() not in self._opciones_venta:
+        for p in productos:
+            opciones.append(self._texto_opcion_producto(p))
+        menu = self.menu_productos["menu"]
+        menu.delete(0, "end")
+        if opciones:
+            for opcion in opciones:
+                menu.add_command(label=opcion, command=lambda v=opcion: self.var_producto_venta.set(v))
+            if self.var_producto_venta.get() not in opciones:
+                self.var_producto_venta.set(opciones[0])
+        else:
+            menu.add_command(label="", command=lambda: self.var_producto_venta.set(""))
             self.var_producto_venta.set("")
 
-        self._vaciar_tabla(self.tabla_ventas)
+        self.lista_ventas.delete(0, tk.END)
         for venta in self.inventario.historial_ventas(limite=20):
-            self.tabla_ventas.insert(
-                "",
-                "end",
-                values=(
-                    venta.fecha,
-                    venta.clave,
-                    venta.nombre,
-                    venta.cantidad,
-                    dinero(venta.precio_unitario),
-                    dinero(venta.total),
-                ),
-            )
+            linea = venta.fecha + " | " + venta.clave + " | " + venta.nombre + " | " + str(venta.cantidad) + " x " + dinero(venta.precio_unitario) + " = " + dinero(venta.total)
+            self.lista_ventas.insert(tk.END, linea)
         self._actualizar_resumen_venta()
 
     def _refrescar_reportes(self):
         totales = self.inventario.totales()
-        self.tarjetas["total"].configure(text=dinero(totales["total_vendido"]))
-        self.tarjetas["unidades"].configure(text=f"{totales['unidades_vendidas']:,}")
-        self.tarjetas["ventas"].configure(text=f"{totales['numero_ventas']:,}")
-        self.tarjetas["inventario"].configure(text=dinero(totales["valor_inventario"]))
+        self.var_total_vendido.set(dinero(totales["total_vendido"]))
+        self.var_unidades_vendidas.set(str(totales["unidades_vendidas"]))
+        self.var_numero_ventas.set(str(totales["numero_ventas"]))
+        self.var_valor_inventario.set(dinero(totales["valor_inventario"]))
         self.var_umbral.set(str(self.inventario.umbral_bajo_inventario))
 
-        self._vaciar_tabla(self.tabla_bajo)
+        self.lista_bajos.delete(0, tk.END)
         for producto in self.inventario.productos_bajo_inventario():
-            self.tabla_bajo.insert(
-                "",
-                "end",
-                values=(producto.clave, producto.nombre, producto.cantidad),
-            )
+            self.lista_bajos.insert(tk.END, producto.clave + " | " + producto.nombre + " | cant: " + str(producto.cantidad))
 
-        self._vaciar_tabla(self.tabla_historial)
+        self.lista_historial.delete(0, tk.END)
         for venta in self.inventario.historial_ventas():
-            self.tabla_historial.insert(
-                "",
-                "end",
-                values=(venta.fecha, venta.clave, venta.nombre, venta.cantidad, dinero(venta.total)),
-            )
+            self.lista_historial.insert(tk.END, venta.fecha + " | " + venta.clave + " | " + str(venta.cantidad) + " | " + dinero(venta.total))
 
     def actualizar_todo(self):
         self._refrescar_inventario()
@@ -559,8 +371,8 @@ class Aplicacion(tk.Tk):
 
 
 def main():
-    aplicacion = Aplicacion()
-    aplicacion.mainloop()
+    app = Aplicacion()
+    app.mainloop()
 
 
 if __name__ == "__main__":

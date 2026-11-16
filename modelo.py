@@ -1,15 +1,10 @@
 
-from __future__ import annotations
-
 import json
-import math
 import os
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 
 
-RUTA_DATOS_POR_DEFECTO = Path(__file__).with_name("datos.json")
+RUTA_DATOS_POR_DEFECTO = os.path.join(os.path.dirname(__file__), "datos.json")
 UMBRAL_POR_DEFECTO = 5
 
 
@@ -28,10 +23,10 @@ def _campo_precio(valor):
     texto = "" if valor is None else str(valor).strip().replace("$", "").replace(",", ".")
     try:
         numero = float(texto)
-    except ValueError as exc:
-        raise ErrorInventario("El precio debe ser un número mayor o igual a 0.") from exc
-    if not math.isfinite(numero) or numero < 0:
-        raise ErrorInventario("El precio debe ser un número mayor o igual a 0.")
+    except (ValueError, TypeError):
+        raise ErrorInventario("El precio debe ser un numero mayor o igual a 0.")
+    if numero != numero or numero in (float("inf"), float("-inf")) or numero < 0:
+        raise ErrorInventario("El precio debe ser un numero mayor o igual a 0.")
     return round(numero, 2)
 
 
@@ -39,19 +34,19 @@ def _campo_entero(valor, nombre_campo, minimo=0):
     texto = "" if valor is None else str(valor).strip()
     try:
         numero = int(texto)
-    except ValueError as exc:
-        raise ErrorInventario(f"«{nombre_campo}» debe ser un número entero.") from exc
+    except (ValueError, TypeError):
+        raise ErrorInventario(f"��{nombre_campo}�� debe ser un nǧmero entero.")
     if numero < minimo:
-        raise ErrorInventario(f"«{nombre_campo}» debe ser mayor o igual a {minimo}.")
+        raise ErrorInventario(f"��{nombre_campo}�� debe ser mayor o igual a {minimo}.")
     return numero
 
 
-@dataclass
 class Producto:
-    clave: str
-    nombre: str
-    precio: float
-    cantidad: int
+    def __init__(self, clave, nombre, precio, cantidad):
+        self.clave = clave
+        self.nombre = nombre
+        self.precio = precio
+        self.cantidad = cantidad
 
     @property
     def valor(self):
@@ -75,15 +70,15 @@ class Producto:
         )
 
 
-@dataclass
 class Venta:
-    id: int
-    fecha: str
-    clave: str
-    nombre: str
-    cantidad: int
-    precio_unitario: float
-    total: float
+    def __init__(self, id, fecha, clave, nombre, cantidad, precio_unitario, total):
+        self.id = id
+        self.fecha = fecha
+        self.clave = clave
+        self.nombre = nombre
+        self.cantidad = cantidad
+        self.precio_unitario = precio_unitario
+        self.total = total
 
     def a_dict(self):
         return {
@@ -113,9 +108,9 @@ class Inventario:
     """Administra productos, ventas y su guardado en disco."""
 
     def __init__(self, ruta=None):
-        self.ruta = Path(ruta) if ruta is not None else RUTA_DATOS_POR_DEFECTO
-        self.productos: dict[str, Producto] = {}
-        self.ventas: list[Venta] = []
+        self.ruta = str(ruta) if ruta is not None else RUTA_DATOS_POR_DEFECTO
+        self.productos = {}
+        self.ventas = []
         self.umbral_bajo_inventario = UMBRAL_POR_DEFECTO
         self.siguiente_id = 1
         self.aviso_carga = ""
@@ -126,22 +121,21 @@ class Inventario:
         return str(clave).strip().casefold()
 
     def cargar(self):
-        if not self.ruta.exists():
+        if not os.path.exists(self.ruta):
             return
         try:
-            with self.ruta.open("r", encoding="utf-8") as archivo:
+            with open(self.ruta, "r", encoding="utf-8") as archivo:
                 datos = json.load(archivo)
-        except (OSError, json.JSONDecodeError):
-            respaldo = self.ruta.with_name(
-                f"{self.ruta.stem}.corrupto-{datetime.now():%Y%m%d%H%M%S}{self.ruta.suffix}"
-            )
+        except (OSError, ValueError):
+            base, ext = os.path.splitext(self.ruta)
+            nombre_base = os.path.basename(self.ruta)
+            respaldo = base + ".corrupto-" + datetime.now().strftime("%Y%m%d%H%M%S") + ext
+            nombre_respaldo = os.path.basename(respaldo)
             try:
                 os.replace(self.ruta, respaldo)
-                self.aviso_carga = (
-                    f"No se pudo leer «{self.ruta.name}». Se guardó una copia como «{respaldo.name}»."
-                )
+                self.aviso_carga = 'No se pudo leer "' + nombre_base + '". Se guardo una copia como "' + nombre_respaldo + '".'
             except OSError:
-                self.aviso_carga = f"No se pudo leer «{self.ruta.name}»."
+                self.aviso_carga = 'No se pudo leer "' + nombre_base + '".'
             return
 
         for elemento in datos.get("productos", []):
@@ -177,9 +171,11 @@ class Inventario:
             "ventas": [venta.a_dict() for venta in self.ventas],
             "config": {"umbral_bajo_inventario": self.umbral_bajo_inventario},
         }
-        self.ruta.parent.mkdir(parents=True, exist_ok=True)
-        temporal = self.ruta.with_name(self.ruta.name + ".tmp")
-        with temporal.open("w", encoding="utf-8") as archivo:
+        carpeta = os.path.dirname(self.ruta)
+        if carpeta and not os.path.exists(carpeta):
+            os.makedirs(carpeta)
+        temporal = self.ruta + ".tmp"
+        with open(temporal, "w", encoding="utf-8") as archivo:
             json.dump(datos, archivo, ensure_ascii=False, indent=2)
         os.replace(temporal, self.ruta)
 
